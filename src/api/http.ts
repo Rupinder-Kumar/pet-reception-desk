@@ -26,15 +26,21 @@ export class ConflictError extends ApiError {
   }
 }
 
-/** The backend's error body shape is not consistent (README "API problems" #5), so we probe known keys. */
+/**
+ * Backend errors follow `ProblemDetail` (OpenAPI): `{ title, status, detail, schemaValidationErrors: [{ message }] }`.
+ * We show `detail` plus any validation messages; `message` is kept as a fallback for non-conforming proxies/servers.
+ */
 function messageFrom(body: unknown, fallback: string): string {
-  if (body && typeof body === 'object') {
-    for (const key of ['message', 'detail', 'title', 'exMessage']) {
-      const v = (body as Record<string, unknown>)[key];
-      if (typeof v === 'string' && v) return v;
-    }
-  }
-  return fallback;
+  if (!body || typeof body !== 'object') return fallback;
+  const b = body as Record<string, unknown>;
+  const base = [b.detail, b.title, b.message].find((v): v is string => typeof v === 'string' && v !== '');
+  const validation = Array.isArray(b.schemaValidationErrors)
+    ? b.schemaValidationErrors
+        .map((e) => (e && typeof e === 'object' ? (e as { message?: unknown }).message : undefined))
+        .filter((m): m is string => typeof m === 'string')
+    : [];
+  if (!base) return validation.length ? validation.join('; ') : fallback;
+  return validation.length ? `${base}: ${validation.join('; ')}` : base;
 }
 
 async function send(path: string, method: string, body?: unknown): Promise<unknown> {
@@ -64,11 +70,11 @@ function safeJson(text: string): unknown {
 }
 
 /** Request whose response body is validated against `schema`. */
-export async function requestJson<S extends z.ZodTypeAny>(
+export async function requestJson<T>(
   path: string,
-  schema: S,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   init: { method?: string; body?: unknown } = {},
-): Promise<z.infer<S>> {
+): Promise<T> {
   const data = await send(path, init.method ?? 'GET', init.body);
   const result = schema.safeParse(data);
   if (!result.success) throw new ApiError(502, 'Unexpected response from the clinic server', result.error.issues);

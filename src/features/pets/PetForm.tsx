@@ -62,7 +62,14 @@ export function PetForm({ ownerId, pet, onClose, onSaved }: Props) {
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <Stack gap="sm">
             <TextInput label="Name" withAsterisk autoComplete="off" data-autofocus error={errors.name?.message} {...register('name')} />
-            <TextInput label="Birth date" withAsterisk type="date" max={todayISO()} error={errors.birthDate?.message} {...register('birthDate')} />
+            <TextInput
+              label="Birth date"
+              withAsterisk
+              type="date"
+              max={todayISO()}
+              error={errors.birthDate?.message}
+              {...register('birthDate')}
+            />
             <NativeSelect
               label="Type"
               withAsterisk

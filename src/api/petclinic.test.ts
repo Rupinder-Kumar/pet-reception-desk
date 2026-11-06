@@ -1,32 +1,27 @@
 import { http, HttpResponse } from 'msw';
-import { server } from '../test/server';
 import { API } from '../test/handlers';
-import { searchOwners } from './petclinic';
+import { server } from '../test/server';
+import { listOwners } from './petclinic';
 
-describe('searchOwners', () => {
-  it('returns everyone for an empty term', async () => {
-    expect(await searchOwners('  ')).toHaveLength(2);
-  });
-
-  it('uses the server-side lastName filter for a single word', async () => {
-    let requested = '';
+describe('listOwners', () => {
+  it('fetches the unfiltered list in one request (search is local)', async () => {
+    let calls = 0;
+    let url = '';
     server.use(
       http.get(`${API}/owners`, ({ request }) => {
-        requested = request.url;
+        calls++;
+        url = request.url;
         return HttpResponse.json([]);
       }),
     );
-    await searchOwners('Dav');
-    expect(requested).toContain('lastName=Dav');
+    await listOwners();
+    expect(calls).toBe(1);
+    expect(url).not.toContain('lastName');
   });
 
-  it('finds an owner by phone digits via the client-side workaround', async () => {
-    const result = await searchOwners('608-555-1749');
-    expect(result.map((o) => o.lastName)).toEqual(['Davis']);
-  });
-
-  it('finds an owner by full name', async () => {
-    const result = await searchOwners('george franklin');
-    expect(result.map((o) => o.lastName)).toEqual(['Franklin']);
+  it('returns owners with their pets and visits parsed', async () => {
+    const owners = await listOwners();
+    expect(owners).toHaveLength(2);
+    expect(owners[0]?.pets[0]?.visits[0]?.description).toBe('Rabies shot');
   });
 });

@@ -57,13 +57,27 @@ export function OwnerForm({ owner, onClose, onSaved }: Props) {
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <Stack gap="sm">
           <Group grow align="flex-start">
-            <TextInput label="First name" withAsterisk autoComplete="off" data-autofocus error={errors.firstName?.message} {...register('firstName')} />
+            <TextInput
+              label="First name"
+              withAsterisk
+              autoComplete="off"
+              data-autofocus
+              error={errors.firstName?.message}
+              {...register('firstName')}
+            />
             <TextInput label="Last name" withAsterisk autoComplete="off" error={errors.lastName?.message} {...register('lastName')} />
           </Group>
           <TextInput label="Address" withAsterisk autoComplete="off" error={errors.address?.message} {...register('address')} />
           <Group grow align="flex-start">
             <TextInput label="City" withAsterisk autoComplete="off" error={errors.city?.message} {...register('city')} />
-            <TextInput label="Telephone" withAsterisk inputMode="numeric" autoComplete="off" error={errors.telephone?.message} {...register('telephone')} />
+            <TextInput
+              label="Telephone"
+              withAsterisk
+              inputMode="numeric"
+              autoComplete="off"
+              error={errors.telephone?.message}
+              {...register('telephone')}
+            />
           </Group>
           {mutation.isError && <ErrorBox error={mutation.error} />}
           <Group justify="flex-end" mt="xs">

@@ -1,7 +1,7 @@
 /**
  * In-memory fake of the PetClinic REST API used by the tests (MSW).
- * It mirrors the behaviours the frontend relies on: `lastName` prefix filter, 201 + body on POST,
- * 204 on PUT, owner payload embedding pets and visits.
+ * It mirrors the behaviours the frontend relies on (per the OpenAPI spec): `lastName` filter, 201 + body on POST,
+ * 200 + body on owner PUT, owner payload embedding pets and visits.
  * Contract drift between this fake and the real backend is a known risk (README) -> run the manual smoke test.
  */
 import { http, HttpResponse } from 'msw';
@@ -16,8 +16,22 @@ const types: PetType[] = [
 
 const seed = (): Owner[] => [
   {
-    id: 1, firstName: 'George', lastName: 'Franklin', address: '110 W. Liberty St.', city: 'Madison', telephone: '6085551023',
-    pets: [{ id: 1, name: 'Leo', birthDate: '2010-09-07', type: types[0]!, ownerId: 1, visits: [{ id: 1, date: '2024-01-10', description: 'Rabies shot', petId: 1 }] }],
+    id: 1,
+    firstName: 'George',
+    lastName: 'Franklin',
+    address: '110 W. Liberty St.',
+    city: 'Madison',
+    telephone: '6085551023',
+    pets: [
+      {
+        id: 1,
+        name: 'Leo',
+        birthDate: '2010-09-07',
+        type: types[0]!,
+        ownerId: 1,
+        visits: [{ id: 1, date: '2024-01-10', description: 'Rabies shot', petId: 1 }],
+      },
+    ],
   },
   { id: 2, firstName: 'Betty', lastName: 'Davis', address: '638 Cardinal Ave.', city: 'Sun Prairie', telephone: '6085551749', pets: [] },
 ];
@@ -55,7 +69,7 @@ export const handlers = [
     const o = findOwner(String(params.id));
     if (!o) return notFound();
     Object.assign(o, await request.json());
-    return new HttpResponse(null, { status: 204 });
+    return HttpResponse.json(o); // spec: 200 + the updated owner
   }),
   http.post(`${API}/owners/:id/pets`, async ({ params, request }) => {
     const o = findOwner(String(params.id));

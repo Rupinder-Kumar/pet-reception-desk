@@ -2,27 +2,27 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { keys, seedFromSearch } from './hooks/queries';
+import { keys, seedFromList } from './hooks/queries';
 import { API, dbOwner } from './test/handlers';
 import { renderApp } from './test/renderApp';
 import { server } from './test/server';
 
 describe('state layer', () => {
-  it('renders a selected owner instantly from search results, then refreshes in the background', async () => {
+  it('renders a selected owner instantly from the cached list, then refreshes in the background', async () => {
     const user = userEvent.setup();
     renderApp();
     await user.click(await screen.findByRole('button', { name: /franklin, george/i }));
 
-    // Synchronously after the click: no loading state, the owner comes from the search result.
+    // Synchronously after the click: no loading state, the owner comes from the cached list.
     expect(screen.getByRole('heading', { name: 'George Franklin' })).toBeInTheDocument();
     expect(screen.getByText('110 W. Liberty St.')).toBeInTheDocument();
   });
 
-  it('seedFromSearch picks the freshest cached copy', async () => {
+  it('seedFromList copies an owner out of the cached list', async () => {
     const { client } = renderApp();
     await screen.findByRole('button', { name: /davis, betty/i });
-    expect(seedFromSearch(client, 2)?.data.lastName).toBe('Davis');
-    expect(seedFromSearch(client, 999)).toBeUndefined();
+    expect(seedFromList(client, 2)?.data.lastName).toBe('Davis');
+    expect(seedFromList(client, 999)).toBeUndefined();
   });
 
   it('shows a new visit immediately (optimistic) and marks it as saving until the server confirms', async () => {
@@ -103,7 +103,7 @@ describe('state layer', () => {
 
     expect(listCalls).toBe(before);
     // ...but the lists are marked stale so the next real search reloads them.
-    expect(client.getQueryState(keys.ownerSearch(''))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(keys.ownerList)?.isInvalidated).toBe(true);
   });
 });
 
@@ -113,5 +113,47 @@ describe('seeding does not mask failures', () => {
     renderApp('/owners/1');
     expect(await screen.findByText('Owner gone')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'George Franklin' })).not.toBeInTheDocument();
+  });
+});
+
+describe('local search', () => {
+  it('filters locally: typing never hits the API again', async () => {
+    const user = userEvent.setup();
+    let listCalls = 0;
+    server.use(
+      http.get(`${API}/owners`, () => {
+        listCalls++;
+        return HttpResponse.json([dbOwner(1), dbOwner(2)]);
+      }),
+    );
+    renderApp();
+    await screen.findByRole('button', { name: /davis, betty/i });
+
+    await user.type(screen.getByLabelText(/search owners/i), 'dav');
+    await waitFor(() => expect(screen.queryByRole('button', { name: /franklin, george/i })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /davis, betty/i })).toBeInTheDocument();
+    expect(listCalls).toBe(1);
+  });
+
+  it.each([
+    ['phone with formatting', '(608) 555-1023', /franklin, george/i],
+    ['pet name', 'leo', /franklin, george/i],
+    ['city', 'sun prairie', /davis, betty/i],
+    ['first name', 'betty', /davis, betty/i],
+    ['full name, reversed', 'franklin george', /franklin, george/i],
+  ])('finds an owner by %s', async (_label, term, expected) => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.type(await screen.findByLabelText(/search owners/i), term);
+    expect(await screen.findByRole('button', { name: expected })).toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByRole('list', { name: /search results/i })).getAllByRole('listitem')).toHaveLength(1));
+  });
+
+  it('shows how many owners match', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    expect(await screen.findByText('2 owners')).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/search owners/i), 'fran');
+    expect(await screen.findByText('1 of 2 owners')).toBeInTheDocument();
   });
 });

@@ -3,7 +3,7 @@
  *
  *  1. The server is the source of truth; ONE cache entry per owner (`GET /owners/{id}` embeds pets + visits)
  *     feeds the owner panel, pet list and pet panel. No denormalised copies.
- *  2. Selecting an owner is instant: `usePrimeOwner` copies the owner from the search results already in cache
+ *  2. Selecting an owner is instant: `usePrimeOwner` copies the owner from the owner list already in cache
  *     into the owner entry, which then refreshes in the background (stale-while-revalidate). It is an explicit,
  *     one-shot write at selection time. (An `initialData` option was rejected: TanStack re-applies it to an
  *     errored query without data, silently masking a 404 behind stale list data.)
@@ -11,7 +11,7 @@
  *  4. Edits are guarded by a client-side conflict check (workaround for the missing ETag).
  *  5. Invalidation is targeted: a visit does not refetch search lists, an owner edit does.
  */
-import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import * as api from '../api/petclinic';
 import { ConflictError } from '../api/http';
@@ -21,8 +21,8 @@ import type { Owner, Pet } from '../api/schemas';
 export const keys = {
   /** Prefix of every owner *list* (and nothing else). */
   owners: ['owners'] as const,
-  searchRoot: ['owners', 'search'] as const,
-  ownerSearch: (term: string) => ['owners', 'search', term.trim()] as const,
+  /** The full owner list; searched locally. */
+  ownerList: ['owners', 'list'] as const,
   owner: (id: number) => ['owner', id] as const,
   petTypes: ['petTypes'] as const,
 };
@@ -35,38 +35,31 @@ const ownerQuery = (id: number) =>
     staleTime: 5_000,
   });
 
-/** Most recent copy of an owner found in any cached search result. Exported for tests. */
-export function seedFromSearch(qc: QueryClient, id: number): { data: Owner; updatedAt: number } | undefined {
-  let best: { data: Owner; updatedAt: number } | undefined;
-  for (const [key, list] of qc.getQueriesData<Owner[]>({ queryKey: keys.searchRoot })) {
-    const hit = list?.find((o) => o.id === id);
-    const updatedAt = qc.getQueryState(key)?.dataUpdatedAt ?? 0;
-    if (hit && (!best || updatedAt > best.updatedAt)) best = { data: hit, updatedAt };
-  }
-  return best;
+/** Copy of an owner from the cached owner list, with the time that list was fetched. Exported for tests. */
+export function seedFromList(qc: QueryClient, id: number): { data: Owner; updatedAt: number } | undefined {
+  const hit = qc.getQueryData<Owner[]>(keys.ownerList)?.find((o) => o.id === id);
+  return hit && { data: hit, updatedAt: qc.getQueryState(keys.ownerList)?.dataUpdatedAt ?? 0 };
 }
 
-export const useOwnerSearch = (term: string) =>
-  useQuery({
-    queryKey: keys.ownerSearch(term),
-    queryFn: () => api.searchOwners(term),
-    staleTime: 10_000,
-    placeholderData: keepPreviousData, // no flicker while typing
-  });
+/**
+ * The full owner list, fetched once and searched locally. Kept reasonably fresh for a long-running desk session:
+ * refetched on window focus after 30 s, and after owner create/edit.
+ */
+export const useOwners = () =>
+  useQuery({ queryKey: keys.ownerList, queryFn: api.listOwners, staleTime: 30_000, refetchOnWindowFocus: true });
 
-export const useOwner = (id: number | undefined) =>
-  useQuery({ ...ownerQuery(id ?? -1), enabled: id !== undefined });
+export const useOwner = (id: number | undefined) => useQuery({ ...ownerQuery(id ?? -1), enabled: id !== undefined });
 
 /**
- * Returns a function that pre-fills the owner entry from cached search results (no-op if the entry already exists
- * or the owner is in no cached list, e.g. a deep link). The original fetch timestamp is kept, so data older than
+ * Returns a function that pre-fills the owner entry from the cached owner list (no-op if the entry already exists
+ * or the owner is not in the list, e.g. a deep link). The original fetch timestamp is kept, so data older than
  * `staleTime` is refetched immediately on mount.
  */
 export function usePrimeOwner() {
   const qc = useQueryClient();
   return (id: number) => {
     if (qc.getQueryData(keys.owner(id)) !== undefined) return;
-    const seed = seedFromSearch(qc, id);
+    const seed = seedFromList(qc, id);
     if (seed) qc.setQueryData(keys.owner(id), seed.data, { updatedAt: seed.updatedAt });
   };
 }
@@ -157,13 +150,17 @@ export function useAddVisit(ownerId: number, petId: number) {
     onMutate: async (visit) => {
       await qc.cancelQueries({ queryKey: key }); // an in-flight refetch must not overwrite the optimistic entry
       const previous = qc.getQueryData<Owner>(key);
-      qc.setQueryData<Owner>(key, (owner) =>
-        owner && {
-          ...owner,
-          pets: owner.pets.map((p) =>
-            p.id === petId ? { ...p, visits: [...p.visits, { id: -Date.now(), date: visit.date, description: visit.description, petId }] } : p,
-          ),
-        },
+      qc.setQueryData<Owner>(
+        key,
+        (owner) =>
+          owner && {
+            ...owner,
+            pets: owner.pets.map((p) =>
+              p.id === petId
+                ? { ...p, visits: [...p.visits, { id: -Date.now(), date: visit.date, description: visit.description, petId }] }
+                : p,
+            ),
+          },
       );
       return { previous };
     },

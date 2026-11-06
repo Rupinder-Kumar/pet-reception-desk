@@ -25,7 +25,11 @@ export function Workspace() {
   return (
     <Grid gutter="md">
       <Grid.Col span={{ base: 12, md: 4, lg: 3 }}>
-        <OwnerSearch term={term} onTermChange={setTerm} selectedOwnerId={ownerId} onSelect={(id) => {
+        <OwnerSearch
+          term={term}
+          onTermChange={setTerm}
+          selectedOwnerId={ownerId}
+          onSelect={(id) => {
             primeOwner(id); // instant render from the search result; refreshed in the background
             navigate(`/owners/${id}`);
           }}

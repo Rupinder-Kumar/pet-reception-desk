@@ -100,6 +100,31 @@ describe('Reception desk workflow', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('edits a pet and shows the new name immediately', async () => {
+    const user = userEvent.setup();
+    renderApp('/owners/1/pets/1');
+
+    await user.click(await screen.findByRole('button', { name: /edit pet/i }));
+    const dialog = await screen.findByRole('dialog', { name: /edit leo/i });
+    const name = within(dialog).getByLabelText(/name/i);
+    await user.clear(name);
+    await user.type(name, 'Leonard');
+    await user.click(within(dialog).getByRole('button', { name: /save pet/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Leonard' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('shows an error when the owner list cannot be loaded and recovers on Retry', async () => {
+    const user = userEvent.setup();
+    server.use(http.get(`${API}/owners`, () => HttpResponse.json({ detail: 'Database unavailable' }, { status: 500 }), { once: true }));
+    renderApp();
+
+    expect(await screen.findByText('Database unavailable')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(await screen.findByRole('button', { name: /franklin, george/i })).toBeInTheDocument();
+  });
+
   it('surfaces a server error from visit registration and keeps the typed text', async () => {
     const user = userEvent.setup();
     server.use(http.post(`${API}/owners/1/pets/1/visits`, () => HttpResponse.json({ message: 'Visit rejected' }, { status: 400 })));

@@ -24,6 +24,25 @@ describe('http client', () => {
     });
   });
 
+  it('combines ProblemDetail detail with schemaValidationErrors', async () => {
+    server.use(
+      http.post(`${API}/x`, () =>
+        HttpResponse.json(
+          {
+            title: 'Bad Request',
+            status: 400,
+            detail: 'Validation failed',
+            schemaValidationErrors: [{ message: "[Path '/telephone'] too long" }],
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    await expect(requestJson('/x', z.unknown(), { method: 'POST', body: {} })).rejects.toMatchObject({
+      message: "Validation failed: [Path '/telephone'] too long",
+    });
+  });
+
   it('falls back to a generic message when the error body is not JSON', async () => {
     server.use(http.get(`${API}/x`, () => new HttpResponse('boom', { status: 500 })));
     await expect(requestJson('/x', z.unknown())).rejects.toMatchObject({ status: 500, message: 'Request failed (500)' });

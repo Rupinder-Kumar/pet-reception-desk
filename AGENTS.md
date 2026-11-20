@@ -1,7 +1,21 @@
 # AGENTS.md — instructions for AI coding assistants
 
 Works with Claude Code, Cursor, Copilot agents and similar. Project: **Reception Desk**, a React + TypeScript frontend for the
-unmodified Spring PetClinic REST backend (external; **never change it**). Read `README.md` and `docs/ARCHITECTURE.md` first.
+unmodified Spring PetClinic REST backend (external; **never change it**).
+
+This file is enough for most tasks. The `docs/` files are written for people: open one only when the task needs it, and read
+the relevant section, not the whole file.
+
+| When you are…                             | Read                                                        |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| changing an architecture rule below       | `docs/DECISIONS.md` (find the ADR by number; add a new one) |
+| working on owner search                   | `docs/ARCHITECTURE.md` → "Local search (how it works)"      |
+| hitting surprising backend behaviour      | `docs/API_PROBLEMS.md`                                      |
+| changing API calls or payloads            | `contract/openapi.yml` (only the paths/schemas you touch)   |
+| asked to check a requirement              | `docs/REQUIREMENTS_MATRIX.md` (the matching section)        |
+| testing manually against the real backend | `docs/SMOKE_TEST.md`                                        |
+
+`README.md`, `docs/ai/AI_LOG.md` and `docs/ai/prompts.md` are for human readers; skip them unless asked.
 
 ## Commands
 
